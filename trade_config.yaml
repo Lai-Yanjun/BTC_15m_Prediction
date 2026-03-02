@@ -36,7 +36,7 @@ trade:
   poll_seconds: 1
   live_enabled: true
   auto_train_if_missing: false
-  post_only: true
+  post_only: false
   cancel_after_sec: 5
   # 到期后等待多少秒再开始轮询结算后余额（2小时=7200）
   settlement_grace_sec: 7200
