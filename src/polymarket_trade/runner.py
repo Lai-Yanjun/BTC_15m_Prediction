@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import time
 from collections import deque
@@ -8,9 +9,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
 from polymarket_trade.config import TradeConfig
 from polymarket_trade.executor import PolymarketExecutor
 from polymarket_trade.signal_model import Stacking15mSignal
+
+REDEEM_POLL_SECONDS = 900  # 固定 15 分钟轮询一次 redeem/余额
 
 
 @dataclass
@@ -90,8 +95,70 @@ def _run_claim_command(command: str, timeout_sec: int) -> dict:
         return {"ok": False, "reason": f"CLAIM_CMD_ERROR:{type(e).__name__}", "detail": repr(e)}
 
 
+def _build_claim_command(command: str, condition_id: str) -> str:
+    base = (command or "").strip()
+    cid = (condition_id or "").strip()
+    if not base:
+        return ""
+    if not cid:
+        return base
+    if "{condition_id}" in base:
+        return base.replace("{condition_id}", cid)
+    # 默认给结算脚本补上 condition id，避免配置里 condition_id 为空时自动 redeem 失败
+    return f"{base} --condition-id {shlex.quote(cid)}"
+
+
+def _parse_listish(v) -> list:
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        txt = v.strip()
+        if txt.startswith("[") and txt.endswith("]"):
+            try:
+                arr = json.loads(txt)
+                return arr if isinstance(arr, list) else []
+            except Exception:
+                return []
+    return []
+
+
+def _fetch_market_by_slot(cfg: TradeConfig, slot_start_ts: int) -> dict:
+    slug = f"{cfg.market_slug_prefix}-{int(slot_start_ts)}"
+    url = f"{cfg.gamma_api_base.rstrip('/')}/markets/slug/{slug}"
+    r = requests.get(url, timeout=8)
+    if r.status_code != 200:
+        raise RuntimeError(f"GAMMA_HTTP_{r.status_code}")
+    m = r.json()
+    outcomes = [str(x) for x in _parse_listish(m.get("outcomes"))]
+    token_ids = [str(x) for x in _parse_listish(m.get("clobTokenIds"))]
+    if len(outcomes) != len(token_ids) or len(outcomes) < 2:
+        raise RuntimeError("INVALID_OUTCOME_TOKEN_MAPPING")
+    token_up = ""
+    token_down = ""
+    for i, outcome in enumerate(outcomes):
+        o = outcome.lower()
+        if o == "up":
+            token_up = token_ids[i]
+        elif o == "down":
+            token_down = token_ids[i]
+    if not token_up or not token_down:
+        raise RuntimeError("UP_DOWN_TOKENS_NOT_FOUND")
+    condition_id = str(m.get("conditionId") or m.get("condition_id") or "").strip()
+    expiry_utc = str(m.get("endDate") or m.get("endDateIso") or "").strip()
+    if not condition_id:
+        raise RuntimeError("MISSING_CONDITION_ID")
+    return {
+        "slug": slug,
+        "question": str(m.get("question") or ""),
+        "condition_id": condition_id,
+        "token_up": token_up,
+        "token_down": token_down,
+        "expiry_utc": expiry_utc,
+    }
+
+
 def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
-    if not cfg.token_up or not cfg.token_down:
+    if (not cfg.auto_update_15m_market) and (not cfg.token_up or not cfg.token_down):
         raise ValueError("trade_config.yaml 里必须配置 token_up / token_down")
 
     signal = Stacking15mSignal(Path.cwd(), cfg)
@@ -104,6 +171,13 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
     settlement_last_error: str | None = None
     next_claim_poll_ts = 0.0
     last_claim_result: dict | None = None
+    current_condition_id = cfg.condition_id
+    current_token_up = cfg.token_up
+    current_token_down = cfg.token_down
+    current_market_slug = ""
+    current_market_question = ""
+    current_market_error = None
+    last_market_slot_start_ts: int | None = None
     if cfg.live_enabled:
         try:
             equity_usdc = float(executor.get_collateral_balance_usdc())
@@ -118,6 +192,20 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
         expiry_passed = bool(expiry_utc and now_dt.timestamp() >= (expiry_utc.timestamp() + float(cfg.settlement_grace_sec)))
         next_close_ts = (int(now_ts) // bar_sec + 1) * bar_sec
         trigger_ts = next_close_ts - 1  # 收盘前 1 秒触发
+
+        if cfg.auto_update_15m_market and (last_market_slot_start_ts != next_close_ts):
+            try:
+                md = _fetch_market_by_slot(cfg, next_close_ts)
+                current_market_slug = str(md["slug"])
+                current_market_question = str(md["question"])
+                current_condition_id = str(md["condition_id"])
+                current_token_up = str(md["token_up"])
+                current_token_down = str(md["token_down"])
+                expiry_utc = _parse_expiry_utc(str(md["expiry_utc"]))
+                current_market_error = None
+            except Exception as e:
+                current_market_error = f"AUTO_MARKET_ERROR:{type(e).__name__}:{e}"
+            last_market_slot_start_ts = next_close_ts
 
         if (not run_once) and (not expiry_passed):
             if now_ts < trigger_ts:
@@ -142,9 +230,10 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
             if cfg.live_enabled and not settlement_done:
                 if now_ts >= next_claim_poll_ts:
                     claim_polled = True
-                    next_claim_poll_ts = now_ts + float(max(60, cfg.claim_poll_seconds))
+                    next_claim_poll_ts = now_ts + float(REDEEM_POLL_SECONDS)
                     if cfg.auto_claim_enabled:
-                        last_claim_result = _run_claim_command(cfg.claim_command, cfg.claim_timeout_sec)
+                        claim_command = _build_claim_command(cfg.claim_command, current_condition_id)
+                        last_claim_result = _run_claim_command(claim_command, cfg.claim_timeout_sec)
                         if not last_claim_result.get("ok", False):
                             settlement_last_error = str(last_claim_result.get("reason", "CLAIM_COMMAND_FAILED"))
                         else:
@@ -165,18 +254,20 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
             action = "HOLD"
             token_id = ""
             side_prob = 0.0
-            if up_prob >= cfg.upper_threshold:
+            if current_market_error:
+                risk_block = current_market_error
+            elif up_prob >= cfg.upper_threshold:
                 action = "BUY_UP"
-                token_id = cfg.token_up
+                token_id = current_token_up
                 side_prob = up_prob
             elif up_prob <= cfg.lower_threshold:
                 action = "BUY_DOWN"
-                token_id = cfg.token_down
+                token_id = current_token_down
                 side_prob = down_prob
 
             order_usdc = _calc_order_usdc(cfg, equity_usdc)
 
-            risk_block = None
+            risk_block = None if not current_market_error else current_market_error
             if action != "HOLD":
                 if len(st.orders_in_hour) >= cfg.max_orders_per_hour:
                     risk_block = "MAX_ORDERS_PER_HOUR"
@@ -213,9 +304,14 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
             "equity_ratio": cfg.equity_ratio,
             "dynamic_sizing": cfg.dynamic_sizing,
             "market_expiry_utc": cfg.market_expiry_utc,
+            "market_slug": current_market_slug,
+            "market_question": current_market_question,
+            "condition_id": current_condition_id,
+            "auto_update_15m_market": cfg.auto_update_15m_market,
+            "auto_market_error": current_market_error,
             "settlement_done": settlement_done,
             "settlement_last_error": settlement_last_error,
-            "claim_poll_seconds": cfg.claim_poll_seconds,
+            "claim_poll_seconds": REDEEM_POLL_SECONDS,
             "claim_polled": claim_polled,
             "last_claim_result": last_claim_result,
             "exec": None

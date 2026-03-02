@@ -2,22 +2,28 @@ market:
   symbol: "BTC/USDT"
   timeframe: "15m"
   lookback_bars: 1200
+  # true 时自动按时间匹配 btc-updown-15m-<slotStartTs>，无需手填下方 id/token/expiry
+  auto_update_15m_market: true
+  # BTC 15m 市场 slug 前缀
+  market_slug_prefix: "btc-updown-15m"
+  # Gamma API 基地址
+  gamma_api_base: "https://gamma-api.polymarket.com"
   # 当前 Polymarket 市场 condition id（redeem 必填，32-byte hex，长度66，形如 0x...）
-  condition_id: "0xe59d96d37f800f92be45f30093a05bae2710677d3293f47ca7f7cdedba24d175"
+  condition_id: ""
   # 绝大多数 yes/no 市场为 false；仅多结果互斥类 neg-risk 市场才设 true（v1 暂不支持）
   neg_risk: false
   # ISO8601 UTC，例如 2026-03-10T17:00:00Z；到期后停止交易并等待结算后更新权益
-  expiry_utc: "2026-03-02T00:00:00Z"
+  expiry_utc: ""
 
 signal:
   # 例如 0.60 表示 only trade when confidence >= 60%
-  upper_threshold: 0.60
-  lower_threshold: 0.40
+  upper_threshold: 0.52
+  lower_threshold: 0.48
 
 trade:
-  # 注意：这里填的是当前目标市场的 token id，需你按当期市场更新
-  token_up: "60734290866314646217112678270771237620776083869374749602918545924710180037112"
-  token_down: "43915954688402058686531582496235124217839689148563254330461084259603342216594"
+  # auto_update_15m_market=true 时可留空（系统自动更新）
+  token_up: ""
+  token_down: ""
   # dynamic_sizing=true 时，order_usdc 仅作为兜底/兼容
   order_usdc: 5.0
   dynamic_sizing: true
@@ -29,7 +35,7 @@ trade:
   initial_equity_usdc: 100.0
   poll_seconds: 1
   live_enabled: true
-  auto_train_if_missing: true
+  auto_train_if_missing: false
   post_only: true
   cancel_after_sec: 5
   # 到期后等待多少秒再开始轮询结算后余额（2小时=7200）

@@ -27,6 +27,8 @@
 - `market.expiry_utc`：市场到期 UTC 时间；到期后系统停止交易并等待结算后更新权益
 - `market.condition_id`：当前市场 `condition_id`（redeem 必填）
 - `market.neg_risk`：是否 neg-risk 市场（v1 仅支持 `false`）
+- `market.auto_update_15m_market`：是否自动按 15m 时间片更新市场（建议 `true`）
+- `market.market_slug_prefix`：默认 `btc-updown-15m`
 - `trade.auto_claim_enabled`：到期后是否自动执行 claim
 - `trade.claim_command`：自动 claim 的外部命令
 - `trade.claim_poll_seconds`：claim 与余额轮询间隔（建议 `900` 秒）
@@ -52,6 +54,7 @@
 - 下单方式：post-only GTC，`cancel_after_sec` 到时自动撤单
 - 若配置了 `market.expiry_utc` 且已到期：系统不再下单，按 `claim_poll_seconds` 轮询
 - 轮询时先执行 `claim_command`（若启用 `auto_claim_enabled`），再读取余额并更新权益/下单金额
+- `auto_update_15m_market=true` 时：每个 15m 窗口会自动匹配对应市场并更新 `condition_id/token_up/token_down`
 
 ## Redeem 脚本
 - 内置脚本：`python run_settlement.py --config trade_config.yaml`

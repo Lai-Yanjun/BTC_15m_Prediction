@@ -14,6 +14,9 @@ class TradeConfig:
     lookback_bars: int
     condition_id: str
     neg_risk: bool
+    auto_update_15m_market: bool
+    market_slug_prefix: str
+    gamma_api_base: str
     upper_threshold: float
     lower_threshold: float
     order_usdc: float
@@ -70,6 +73,9 @@ def load_trade_config(path: str | Path) -> TradeConfig:
         lookback_bars=int(_get(market, "lookback_bars", 1200)),
         condition_id=str(_get(market, "condition_id", "")),
         neg_risk=bool(_get(market, "neg_risk", False)),
+        auto_update_15m_market=bool(_get(market, "auto_update_15m_market", True)),
+        market_slug_prefix=str(_get(market, "market_slug_prefix", "btc-updown-15m")),
+        gamma_api_base=str(_get(market, "gamma_api_base", "https://gamma-api.polymarket.com")),
         upper_threshold=float(_get(signal, "upper_threshold", 0.60)),
         lower_threshold=float(_get(signal, "lower_threshold", 0.40)),
         order_usdc=float(_get(trade, "order_usdc", 5.0)),

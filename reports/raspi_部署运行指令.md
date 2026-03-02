@@ -127,10 +127,9 @@ nano trade_config.yaml
 ```
 
 确认这些字段：
-- `market.condition_id`
+- `market.auto_update_15m_market: true`
+- `market.market_slug_prefix: "btc-updown-15m"`
 - `market.neg_risk: false`
-- `market.expiry_utc`
-- `trade.token_up` / `trade.token_down`
 - `signal.upper_threshold` / `signal.lower_threshold`
 - `trade.dynamic_sizing: true`
 - `trade.equity_ratio: 0.085`
@@ -233,7 +232,7 @@ sudo systemctl restart predicta-live
 2. `.env` 的 10 个关键字段均为 `OK`（见上面的检查脚本）
 3. `SIGNATURE_TYPE=1`
 4. `market.neg_risk=false`
-5. `trade_config.yaml` 中 `condition_id/token_up/token_down/expiry_utc` 已填
+5. `trade_config.yaml` 中 `market.auto_update_15m_market=true` 且 `market_slug_prefix=btc-updown-15m`
 6. `python run_settlement.py --dry-run` 返回 `ok=true`
 7. `python run_live_model.py --run-once --shadow` 正常出日志
 8. 代理连通：带 `--proxy` 的 dry-run 不报网络错
