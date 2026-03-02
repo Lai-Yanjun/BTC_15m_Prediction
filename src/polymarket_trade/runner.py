@@ -190,12 +190,21 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
         now_ts = time.time()
         now_dt = datetime.now(timezone.utc)
         expiry_passed = bool(expiry_utc and now_dt.timestamp() >= (expiry_utc.timestamp() + float(cfg.settlement_grace_sec)))
-        next_close_ts = (int(now_ts) // bar_sec + 1) * bar_sec
-        trigger_ts = next_close_ts - 1  # 收盘前 1 秒触发
+        trigger_close_ts = (int(now_ts) // bar_sec) * bar_sec
 
-        if cfg.auto_update_15m_market and (last_market_slot_start_ts != next_close_ts):
+        if (not run_once) and (not expiry_passed):
+            if last_trigger_close_ts is None:
+                # 首次启动时，跳过“刚过去的收盘点”，避免对历史 K 线立即下单。
+                last_trigger_close_ts = trigger_close_ts
+            if trigger_close_ts <= last_trigger_close_ts:
+                next_close_ts = last_trigger_close_ts + bar_sec
+                time.sleep(min(float(cfg.poll_seconds), max(0.2, next_close_ts - now_ts)))
+                continue
+
+        market_slot_start_ts = trigger_close_ts
+        if cfg.auto_update_15m_market and (last_market_slot_start_ts != market_slot_start_ts):
             try:
-                md = _fetch_market_by_slot(cfg, next_close_ts)
+                md = _fetch_market_by_slot(cfg, market_slot_start_ts)
                 current_market_slug = str(md["slug"])
                 current_market_question = str(md["question"])
                 current_condition_id = str(md["condition_id"])
@@ -205,15 +214,7 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
                 current_market_error = None
             except Exception as e:
                 current_market_error = f"AUTO_MARKET_ERROR:{type(e).__name__}:{e}"
-            last_market_slot_start_ts = next_close_ts
-
-        if (not run_once) and (not expiry_passed):
-            if now_ts < trigger_ts:
-                time.sleep(min(float(cfg.poll_seconds), max(0.2, trigger_ts - now_ts)))
-                continue
-            if last_trigger_close_ts == next_close_ts:
-                time.sleep(0.2)
-                continue
+            last_market_slot_start_ts = market_slot_start_ts
 
         _update_risk_state(st)
 
@@ -246,7 +247,7 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
                     except Exception as e:
                         settlement_last_error = f"SETTLEMENT_BALANCE_ERROR:{type(e).__name__}"
         else:
-            sig = signal.predict_latest()
+            sig = signal.predict_for_close_ts(trigger_close_ts)
             up_prob = float(sig.up_prob)
             down_prob = float(sig.down_prob)
             claim_polled = False
@@ -276,7 +277,9 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
 
             exec_result = None
             if action != "HOLD" and risk_block is None and cfg.live_enabled:
-                limit_px = min(cfg.max_price, max(cfg.min_price, side_prob))
+                # 保留买入边际：默认最高 0.51，置信度 > 0.60 时最高 0.52。
+                prob_cap = 0.52 if side_prob > 0.60 else 0.51
+                limit_px = min(cfg.max_price, max(cfg.min_price, side_prob), prob_cap)
                 exec_result = executor.buy_token_post_only(
                     token_id=token_id,
                     usdc=order_usdc,
@@ -324,7 +327,7 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
         }
         _append_jsonl(log_path, record)
         print(record)
-        last_trigger_close_ts = next_close_ts
+        last_trigger_close_ts = trigger_close_ts
 
         if run_once:
             return

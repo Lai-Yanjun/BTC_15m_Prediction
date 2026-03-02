@@ -72,6 +72,12 @@ class Stacking15mSignal:
 
         self._train_and_save_fixed()
 
+    def _seconds_per_bar(self) -> int:
+        tf = str(self.cfg.timeframe or "").strip().lower()
+        if tf.endswith("m"):
+            return int(tf[:-1]) * 60
+        raise ValueError(f"Unsupported timeframe: {self.cfg.timeframe}")
+
     def _train_and_save_fixed(self) -> None:
         opt = self._load_opt_details()
         best_base = opt["best_base_params"]
@@ -135,10 +141,19 @@ class Stacking15mSignal:
         }
         (self.model_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def predict_latest(self) -> SignalOutput:
+    def predict_for_close_ts(self, close_ts: int) -> SignalOutput:
         raw = self._fetch_recent_ohlcv()
         feat = build_features(raw)
-        row = feat.iloc[-1:].copy()
+        bar_sec = self._seconds_per_bar()
+        target_open_ts = pd.to_datetime(int(close_ts - bar_sec), unit="s", utc=True)
+        row = feat[feat["timestamp"] == target_open_ts].tail(1).copy()
+        if row.empty:
+            # 兜底：取 close_ts 之前最近的已闭合 K 线，避免拿到刚开启的未闭合 K 线
+            close_cutoff = pd.to_datetime(int(close_ts), unit="s", utc=True)
+            row = feat[feat["timestamp"] < close_cutoff].tail(1).copy()
+        if row.empty:
+            raise RuntimeError(f"NO_CLOSED_CANDLE_FOR_SIGNAL close_ts={int(close_ts)}")
+
         row[self.feature_cols] = row[self.feature_cols].replace([np.inf, -np.inf], np.nan).fillna(self.medians)
         x = row[self.feature_cols]
 
@@ -153,4 +168,10 @@ class Stacking15mSignal:
         up_prob = float(np.clip(up_prob, 1e-6, 1 - 1e-6))
         ts = pd.to_datetime(row["timestamp"].iloc[0], utc=True)
         return SignalOutput(candle_ts=ts, up_prob=up_prob, down_prob=1.0 - up_prob)
+
+    def predict_latest(self) -> SignalOutput:
+        bar_sec = self._seconds_per_bar()
+        now_ts = int(pd.Timestamp.now(tz="UTC").timestamp())
+        close_ts = (now_ts // bar_sec) * bar_sec
+        return self.predict_for_close_ts(close_ts)
 
