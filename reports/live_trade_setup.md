@@ -11,7 +11,9 @@
 1. 复制 `.env.example` 为 `.env`
 2. 填入 API 与私钥
 3. 安装依赖：
-   - `python -m pip install -r requirements.txt`
+   - `python3 -m venv .venv`
+   - `./.venv/bin/python -m pip install -U pip`
+   - `./.venv/bin/python -m pip install -r requirements.txt`
 
 ## 关键配置
 - `trade.token_up` / `trade.token_down`：当前市场 token id（必须填写）
@@ -35,18 +37,18 @@
 
 ## 运行
 - 先做代理与下单连通性检查（推荐）：
-  - `python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897`
-  - `python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --test-order --order-usdc 1.0 --cancel-after-sec 2`
+  - `./.venv/bin/python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897`
+  - `./.venv/bin/python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --test-order --order-usdc 1.0 --cancel-after-sec 2`
 - 仅跑一轮（便于联调）：
-  - `python run_live_model.py --run-once`
+  - `./.venv/bin/python run_live_model.py --run-once`
 - 只记录不下单（shadow）：
-  - `python run_shadow.py --proxy http://127.0.0.1:7897`
+  - `./.venv/bin/python run_shadow.py --proxy http://127.0.0.1:7897`
 - 持续 live：
-  - `python run_live_model.py`
+  - `./.venv/bin/python run_live_model.py`
 - 树莓派 + 代理（与参考仓库参数一致）：
-  - `python run_shadow.py --proxy http://127.0.0.1:7897`
-  - `python run_live_model.py --proxy http://127.0.0.1:7897`
-  - 或分别设置：`--http-proxy ... --https-proxy ... --no-proxy localhost,127.0.0.1`
+  - `./.venv/bin/python run_shadow.py --proxy http://127.0.0.1:7897`
+  - `./.venv/bin/python run_live_model.py --proxy http://127.0.0.1:7897`
+  - `./.venv/bin/python run_shadow.py --http-proxy http://127.0.0.1:7897 --https-proxy http://127.0.0.1:7897 --no-proxy localhost,127.0.0.1`
 
 ## 输出
 - `reports/live_trade_log.jsonl`：逐次信号、触发动作、风控拦截、下单回执
@@ -61,7 +63,7 @@
 - `auto_update_15m_market=true` 时：每个 15m 窗口会自动匹配对应市场并更新 `condition_id/token_up/token_down`
 
 ## Redeem 脚本
-- 内置脚本：`python run_settlement.py --config trade_config.yaml`
+- 内置脚本：`./.venv/bin/python run_settlement.py --config trade_config.yaml`
 - 默认优先走方案A（Relayer gasless redeem）；失败自动回退方案B（链上 Proxy/CTF redeem）
 - `SIGNATURE_TYPE=1` 的回退路由为 Proxy Factory redeem
 - 需要 `.env` 里存在 `RPC_URL`（例如 `https://polygon-rpc.com`）
@@ -70,5 +72,5 @@
   - `POLY_BUILDER_SECRET`
   - `POLY_BUILDER_PASSPHRASE`
 - 支持与主程序同样的代理参数：
-  - `python run_settlement.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --dry-run`
+  - `./.venv/bin/python run_settlement.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --dry-run`
 
