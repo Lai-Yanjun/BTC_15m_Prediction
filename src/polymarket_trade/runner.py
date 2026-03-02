@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import time
@@ -122,13 +123,46 @@ def _parse_listish(v) -> list:
     return []
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _gamma_get_json(url: str) -> dict:
+    timeout_sec = float(os.getenv("GAMMA_TIMEOUT_SEC", "12"))
+    retries = max(1, int(os.getenv("GAMMA_RETRIES", "3")))
+    backoff_base_sec = float(os.getenv("GAMMA_BACKOFF_BASE_SEC", "0.25"))
+    trust_env_proxy = _env_bool("GAMMA_TRUST_ENV_PROXY", True)
+
+    last_err: Exception | None = None
+    for i in range(retries):
+        try:
+            with requests.Session() as sess:
+                sess.trust_env = trust_env_proxy
+                r = sess.get(
+                    url,
+                    timeout=timeout_sec,
+                    headers={"accept": "application/json", "user-agent": "btc-15m-trader/1.0"},
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"GAMMA_HTTP_{r.status_code}")
+            out = r.json()
+            if not isinstance(out, dict):
+                raise RuntimeError("GAMMA_INVALID_JSON")
+            return out
+        except Exception as e:
+            last_err = e
+            if i < retries - 1:
+                time.sleep(backoff_base_sec * (2**i))
+    raise RuntimeError(f"GAMMA_REQUEST_FAILED:{type(last_err).__name__}:{last_err}")
+
+
 def _fetch_market_by_slot(cfg: TradeConfig, slot_start_ts: int) -> dict:
     slug = f"{cfg.market_slug_prefix}-{int(slot_start_ts)}"
     url = f"{cfg.gamma_api_base.rstrip('/')}/markets/slug/{slug}"
-    r = requests.get(url, timeout=8)
-    if r.status_code != 200:
-        raise RuntimeError(f"GAMMA_HTTP_{r.status_code}")
-    m = r.json()
+    m = _gamma_get_json(url)
     outcomes = [str(x) for x in _parse_listish(m.get("outcomes"))]
     token_ids = [str(x) for x in _parse_listish(m.get("clobTokenIds"))]
     if len(outcomes) != len(token_ids) or len(outcomes) < 2:
