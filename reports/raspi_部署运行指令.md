@@ -1,10 +1,61 @@
 # 树莓派从拉取到运行（15m 实盘版）
 
+仓库地址（已固定）：
+- `https://github.com/Lai-Yanjun/BTC_15m_Prediction`
+- 分支：`main`
+
+## 一键部署（推荐）
+
+首次在树莓派执行：
+
+```bash
+mkdir -p ~/apps
+cd ~/apps
+git clone -b main https://github.com/Lai-Yanjun/BTC_15m_Prediction.git predicta-live
+cd predicta-live
+bash deploy_raspi.sh --proxy http://127.0.0.1:7897
+```
+
+不走代理可去掉 `--proxy`：
+
+```bash
+bash deploy_raspi.sh
+```
+
+脚本会自动完成：
+- 安装依赖
+- 拉取/更新代码
+- 建立 `.venv`
+- 安装 `requirements.txt`
+- 创建 `.env`（若不存在）
+- 注册并启动 `predicta-live` 服务
+
+你要做的配置步骤：
+1. 编辑环境变量：`nano ~/apps/predicta-live/.env`
+2. 编辑交易参数：`nano ~/apps/predicta-live/trade_config.yaml`
+3. 重启服务生效：`sudo systemctl restart predicta-live`
+
+停止服务（你关心的）：
+
+```bash
+sudo systemctl stop predicta-live
+```
+
+也可用快捷脚本：
+
+```bash
+cd ~/apps/predicta-live
+bash service_control.sh predicta-live stop
+bash service_control.sh predicta-live start
+bash service_control.sh predicta-live status
+bash service_control.sh predicta-live logs
+```
+
 ## 0) 系统依赖（首次）
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip
+sudo apt install -y git python3 python3-venv python3-pip jq
 ```
 
 ## 1) 拉取代码
@@ -12,7 +63,7 @@ sudo apt install -y git python3 python3-venv python3-pip
 ```bash
 mkdir -p ~/apps
 cd ~/apps
-git clone <你的仓库地址> predicta-live
+git clone -b main https://github.com/Lai-Yanjun/BTC_15m_Prediction.git predicta-live
 cd predicta-live
 ```
 
@@ -20,6 +71,9 @@ cd predicta-live
 
 ```bash
 cd ~/apps/predicta-live
+git fetch origin
+git checkout main
+git reset --hard origin/main
 git pull
 ```
 
@@ -49,6 +103,23 @@ nano .env
 - `POLY_API_KEY` / `POLY_SECRET` / `POLY_PASSPHRASE`
 - `POLY_BUILDER_API_KEY` / `POLY_BUILDER_SECRET` / `POLY_BUILDER_PASSPHRASE`（方案A）
 
+快速检查（不打印密钥明文）：
+
+```bash
+python - <<'PY'
+from dotenv import dotenv_values
+v=dotenv_values(".env")
+keys=[
+ "PRIVATE_KEY","SIGNATURE_TYPE","FUNDER_ADDRESS","RPC_URL",
+ "POLY_API_KEY","POLY_SECRET","POLY_PASSPHRASE",
+ "POLY_BUILDER_API_KEY","POLY_BUILDER_SECRET","POLY_BUILDER_PASSPHRASE",
+]
+for k in keys:
+    val=(v.get(k) or "").strip()
+    print(f"{k}: {'OK' if val else 'MISSING'} len={len(val)}")
+PY
+```
+
 ## 4) 配置交易参数
 
 ```bash
@@ -63,6 +134,13 @@ nano trade_config.yaml
 - `signal.upper_threshold` / `signal.lower_threshold`
 - `trade.dynamic_sizing: true`
 - `trade.equity_ratio: 0.085`
+- `trade.claim_command: "python run_settlement.py --config trade_config.yaml"`
+- `trade.claim_poll_seconds: 900`
+- `trade.settlement_grace_sec: 7200`
+
+建议值（与你当前策略一致）：
+- `signal.upper_threshold: 0.52`
+- `signal.lower_threshold: 0.48`
 
 ## 5) 联调（先 dry-run）
 
@@ -70,6 +148,12 @@ nano trade_config.yaml
 source .venv/bin/activate
 python run_settlement.py --config trade_config.yaml --dry-run
 python run_live_model.py --run-once --shadow
+```
+
+若你要强制测试回退链路（不用 Relayer）：
+
+```bash
+python run_settlement.py --config trade_config.yaml --dry-run --no-relayer
 ```
 
 如需代理（和你参考仓库一致）：
@@ -141,4 +225,36 @@ git pull
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 sudo systemctl restart predicta-live
+```
+
+## 9) 首跑前 10 项检查清单
+
+1. `git branch --show-current` 显示 `main`
+2. `.env` 的 10 个关键字段均为 `OK`（见上面的检查脚本）
+3. `SIGNATURE_TYPE=1`
+4. `market.neg_risk=false`
+5. `trade_config.yaml` 中 `condition_id/token_up/token_down/expiry_utc` 已填
+6. `python run_settlement.py --dry-run` 返回 `ok=true`
+7. `python run_live_model.py --run-once --shadow` 正常出日志
+8. 代理连通：带 `--proxy` 的 dry-run 不报网络错
+9. `reports/live_trade_log.jsonl` 持续写入
+10. systemd `status` 为 `active (running)`
+
+## 10) 常用运维命令（直接复制）
+
+```bash
+# 查看服务状态
+sudo systemctl status predicta-live
+
+# 停止 / 启动 / 重启
+sudo systemctl stop predicta-live
+sudo systemctl start predicta-live
+sudo systemctl restart predicta-live
+
+# 开机自启开关
+sudo systemctl enable predicta-live
+sudo systemctl disable predicta-live
+
+# 实时日志
+journalctl -u predicta-live -f
 ```
