@@ -68,19 +68,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _setup_proxy_env(*, proxy: str | None, http_proxy: str | None, https_proxy: str | None, no_proxy: str) -> None:
-    if proxy:
-        os.environ["http_proxy"] = str(proxy)
-        os.environ["https_proxy"] = str(proxy)
-        os.environ["HTTP_PROXY"] = str(proxy)
-        os.environ["HTTPS_PROXY"] = str(proxy)
-    if http_proxy:
-        os.environ["http_proxy"] = str(http_proxy)
-        os.environ["HTTP_PROXY"] = str(http_proxy)
-    if https_proxy:
-        os.environ["https_proxy"] = str(https_proxy)
-        os.environ["HTTPS_PROXY"] = str(https_proxy)
-    os.environ["no_proxy"] = str(no_proxy)
-    os.environ["NO_PROXY"] = str(no_proxy)
+    from polymarket_trade.proxy_env import inject_proxy_env
+
+    inject_proxy_env(
+        proxy=proxy,
+        http_proxy=http_proxy,
+        https_proxy=https_proxy,
+        no_proxy=no_proxy,
+    )
 
 
 def _normalize_condition_id(condition_id: str) -> str:

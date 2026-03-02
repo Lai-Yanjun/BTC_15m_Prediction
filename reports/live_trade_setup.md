@@ -34,13 +34,17 @@
 - `trade.claim_poll_seconds`：claim 与余额轮询间隔（建议 `900` 秒）
 
 ## 运行
+- 先做代理与下单连通性检查（推荐）：
+  - `python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897`
+  - `python check_order_connectivity.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --test-order --order-usdc 1.0 --cancel-after-sec 2`
 - 仅跑一轮（便于联调）：
   - `python run_live_model.py --run-once`
 - 只记录不下单（shadow）：
-  - `python run_live_model.py --shadow`
+  - `python run_shadow.py --proxy http://127.0.0.1:7897`
 - 持续 live：
   - `python run_live_model.py`
 - 树莓派 + 代理（与参考仓库参数一致）：
+  - `python run_shadow.py --proxy http://127.0.0.1:7897`
   - `python run_live_model.py --proxy http://127.0.0.1:7897`
   - 或分别设置：`--http-proxy ... --https-proxy ... --no-proxy localhost,127.0.0.1`
 

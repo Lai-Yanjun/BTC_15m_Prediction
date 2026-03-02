@@ -1,0 +1,24 @@
+[Unit]
+Description=Predicta PM Shadow Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/apps/predicta-live
+ExecStart=/home/pi/apps/predicta-live/.venv/bin/python /home/pi/apps/predicta-live/run_shadow.py --config /home/pi/apps/predicta-live/trade_config.yaml --proxy http://127.0.0.1:7897
+Restart=always
+RestartSec=5
+
+# 关键点：后台进程不会继承你前台 shell 的代理环境。
+# 如果你不使用 --proxy 参数，请取消下面注释并按实际端口修改。
+# Environment="HTTP_PROXY=http://127.0.0.1:7897"
+# Environment="HTTPS_PROXY=http://127.0.0.1:7897"
+# Environment="http_proxy=http://127.0.0.1:7897"
+# Environment="https_proxy=http://127.0.0.1:7897"
+# Environment="NO_PROXY=localhost,127.0.0.1"
+# Environment="no_proxy=localhost,127.0.0.1"
+
+[Install]
+WantedBy=multi-user.target
