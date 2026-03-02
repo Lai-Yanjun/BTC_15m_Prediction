@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+reports/live_trade_log.jsonl
+reports/*.jsonl
+
+outputs/
+models/
+data/
+catboost_info/
+_ref_son_of_weather/

@@ -1,0 +1,57 @@
+market:
+  symbol: "BTC/USDT"
+  timeframe: "15m"
+  lookback_bars: 1200
+  # 当前 Polymarket 市场 condition id（redeem 必填，32-byte hex，长度66，形如 0x...）
+  condition_id: "0xe59d96d37f800f92be45f30093a05bae2710677d3293f47ca7f7cdedba24d175"
+  # 绝大多数 yes/no 市场为 false；仅多结果互斥类 neg-risk 市场才设 true（v1 暂不支持）
+  neg_risk: false
+  # ISO8601 UTC，例如 2026-03-10T17:00:00Z；到期后停止交易并等待结算后更新权益
+  expiry_utc: "2026-03-02T00:00:00Z"
+
+signal:
+  # 例如 0.60 表示 only trade when confidence >= 60%
+  upper_threshold: 0.60
+  lower_threshold: 0.40
+
+trade:
+  # 注意：这里填的是当前目标市场的 token id，需你按当期市场更新
+  token_up: "60734290866314646217112678270771237620776083869374749602918545924710180037112"
+  token_down: "43915954688402058686531582496235124217839689148563254330461084259603342216594"
+  # dynamic_sizing=true 时，order_usdc 仅作为兜底/兼容
+  order_usdc: 5.0
+  dynamic_sizing: true
+  # Kelly 固定权益比例（例如 8.5% => 0.085）
+  equity_ratio: 0.085
+  min_order_usdc: 2.0
+  max_order_usdc: 100.0
+  # 仅在 live 启动时读余额失败时作为初始权益兜底
+  initial_equity_usdc: 100.0
+  poll_seconds: 1
+  live_enabled: true
+  auto_train_if_missing: true
+  post_only: true
+  cancel_after_sec: 5
+  # 到期后等待多少秒再开始轮询结算后余额（2小时=7200）
+  settlement_grace_sec: 7200
+  # 到期后是否自动执行 claim 命令
+  auto_claim_enabled: true
+  # 到期后 claim/余额轮询间隔（秒）；900=15分钟
+  claim_poll_seconds: 900
+  # claim 命令超时（秒）
+  claim_timeout_sec: 300
+  # 自动结算命令（默认使用项目内置 redeem 脚本）
+  claim_command: "python run_settlement.py --config trade_config.yaml"
+
+risk:
+  max_orders_per_hour: 20
+  max_usdc_per_day: 200
+  slippage: 0.03
+  min_price: 0.05
+  max_price: 0.95
+
+paths:
+  model_opt_json: "outputs/opt_15m_details.json"
+  model_dir: "models/fixed_15m_stacking"
+  output_jsonl: "reports/live_trade_log.jsonl"
+

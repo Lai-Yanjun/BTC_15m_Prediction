@@ -1,0 +1,13 @@
+ccxt
+numpy
+pandas
+matplotlib
+scikit-learn
+lightgbm
+catboost
+pyyaml
+python-dotenv
+py-clob-client
+web3
+py-builder-relayer-client
+py-builder-signing-sdk
