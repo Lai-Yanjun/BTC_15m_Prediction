@@ -34,6 +34,36 @@ def _fetch_json(url: str, timeout_sec: float) -> Any:
     return resp.json()
 
 
+def _probe_url(url: str, timeout_sec: float) -> dict[str, Any]:
+    with requests.Session() as sess:
+        sess.trust_env = True
+        resp = sess.get(
+            url,
+            timeout=float(timeout_sec),
+            headers={"accept": "application/json", "user-agent": "order-connectivity-check/1.0"},
+        )
+    return {
+        "url": url,
+        "status_code": int(resp.status_code),
+        "ok": int(resp.status_code) < 500,
+    }
+
+
+def _probe_first_available(urls: list[str], timeout_sec: float) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    last_error: str | None = None
+    for url in urls:
+        try:
+            result = _probe_url(url, timeout_sec)
+            attempts.append(result)
+            if result["ok"]:
+                return {"ok": True, "selected": result, "attempts": attempts}
+        except Exception as e:
+            last_error = f"{type(e).__name__}:{e}"
+            attempts.append({"url": url, "ok": False, "error": last_error})
+    return {"ok": False, "attempts": attempts, "error": last_error or "NO_ENDPOINT_AVAILABLE"}
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Check proxy egress and Polymarket order connectivity")
     p.add_argument("--config", default="trade_config.yaml", help="配置文件路径")
@@ -85,8 +115,23 @@ def main() -> int:
         final_rc = 1
 
     try:
-        data = _fetch_json("https://data-api.polymarket.com/markets?limit=1", float(args.timeout_sec))
-        report["data_api"] = {"ok": True, "type": type(data).__name__}
+        data_api_probe = _probe_first_available(
+            [
+                "https://data-api.polymarket.com/trades?limit=1",
+                "https://data-api.polymarket.com/oi",
+                "https://data-api.polymarket.com/",
+            ],
+            float(args.timeout_sec),
+        )
+        report["data_api"] = data_api_probe
+        if not bool(data_api_probe.get("ok")):
+            report["ok"] = False
+            msg = str(data_api_probe.get("error", "DATA_API_PROBE_FAILED"))
+            if _contains_geo_block(msg):
+                report["error_code"] = "GEO_BLOCK_403"
+                final_rc = 2
+            elif final_rc == 0:
+                final_rc = 1
     except Exception as e:
         msg = f"{type(e).__name__}:{e}"
         report["ok"] = False
@@ -99,12 +144,34 @@ def main() -> int:
 
     cfg = load_trade_config(args.config)
     token_id = str(args.token_id or cfg.token_up or "").strip()
-    if not token_id and cfg.auto_update_15m_market:
-        # auto_update 场景下配置常为空，这里给出明确提示，避免误判为网络问题。
-        report["clob"] = {"ok": False, "error": "MISSING_TOKEN_ID"}
-        if report["ok"]:
+    if not token_id:
+        # token 缺失时不直接判为失败，先做 CLOB 主机连通探测。
+        # 只有在 test_order 需要真实下单时，才要求必须提供 token。
+        clob_probe = _probe_first_available(
+            [
+                "https://clob.polymarket.com/time",
+                "https://clob.polymarket.com/",
+            ],
+            float(args.timeout_sec),
+        )
+        report["clob"] = {
+            "ok": bool(clob_probe.get("ok")),
+            "mode": "host_probe_only",
+            "token_id": "",
+            "probe": clob_probe,
+        }
+        if args.test_order:
             report["ok"] = False
+            report["clob"]["error"] = "MISSING_TOKEN_ID_FOR_TEST_ORDER"
             if final_rc == 0:
+                final_rc = 1
+        elif not bool(clob_probe.get("ok")):
+            report["ok"] = False
+            msg = str(clob_probe.get("error", "CLOB_PROBE_FAILED"))
+            if _contains_geo_block(msg):
+                report["error_code"] = "GEO_BLOCK_403"
+                final_rc = 2
+            elif final_rc == 0:
                 final_rc = 1
     else:
         try:
