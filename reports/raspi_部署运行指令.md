@@ -136,6 +136,10 @@ nano trade_config.yaml
 - `trade.claim_command: "python run_settlement.py --config trade_config.yaml"`
 - `trade.claim_poll_seconds: 900`
 - `trade.settlement_grace_sec: 7200`
+- `model_artifact.enabled: true`（使用 Release 自动下载模型时）
+- `model_artifact.url: "https://github.com/<owner>/<repo>/releases/download/<tag>/<zip>"`
+- `model_artifact.sha256: "<zip 的 sha256>"`
+- `model_artifact.require_optimal: true`
 
 建议值（与你当前策略一致）：
 - `signal.upper_threshold: 0.52`
@@ -161,6 +165,14 @@ python run_settlement.py --config trade_config.yaml --dry-run --no-relayer
 python run_settlement.py --config trade_config.yaml --dry-run --proxy http://127.0.0.1:7897
 python run_live_model.py --run-once --shadow --proxy http://127.0.0.1:7897
 ```
+
+模型使用 Release 自动下载（方案 C）时，首次启动前建议先验证：
+
+```bash
+python run_live_model.py --run-once --shadow
+```
+
+若本地无模型且 `model_artifact.enabled=true`，程序会先下载并校验模型后再启动。
 
 ## 6) 正式运行
 

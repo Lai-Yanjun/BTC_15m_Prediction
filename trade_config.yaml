@@ -61,3 +61,17 @@ paths:
   model_dir: "models/fixed_15m_stacking"
   output_jsonl: "reports/live_trade_log.jsonl"
 
+model_artifact:
+  # true 时：本地缺模型会先下载 zip 并校验后再启动
+  enabled: true
+  # 推荐填 GitHub Release 直链
+  url: "https://github.com/Lai-Yanjun/BTC_15m_Prediction/releases/download/model-2026-03-02/fixed_15m_stacking_release.zip"
+  # 可选：zip sha256，填了就强校验
+  sha256: "d5c9dcd812a3584f32b4a991ea4ab66cf1e7823327d1e20b15f3d8d1fad3fa83"
+  # 要求模型携带最优标记（model_manifest.json）
+  require_optimal: true
+  # 要求模型类型，默认 ensemble_stacking
+  expected_model_name: "ensemble_stacking"
+  # 可选：要求与特定 opt 文件哈希一致（来自 build_model_artifact.py 输出）
+  expected_opt_sha256: "69c3e4a7ec41285de73265922a76dad544ee8372be5b79b900477c85ea04b2d4"
+

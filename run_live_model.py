@@ -39,6 +39,7 @@ def main() -> int:
     sys.path.insert(0, str(root / "src"))
 
     from polymarket_trade.config import load_trade_config
+    from polymarket_trade.model_artifact import ensure_model_artifact
     from polymarket_trade.runner import run_live_loop
 
     args = build_parser().parse_args()
@@ -49,6 +50,7 @@ def main() -> int:
         no_proxy=str(args.no_proxy),
     )
     cfg = load_trade_config(args.config)
+    ensure_model_artifact(root, cfg)
     if args.shadow:
         from dataclasses import replace
 

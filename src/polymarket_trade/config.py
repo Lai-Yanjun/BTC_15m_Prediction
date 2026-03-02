@@ -49,6 +49,12 @@ class TradeConfig:
 
     model_opt_json: str
     model_dir: str
+    model_artifact_enabled: bool
+    model_artifact_url: str
+    model_artifact_sha256: str
+    model_artifact_require_optimal: bool
+    model_artifact_expected_model_name: str
+    model_artifact_expected_opt_sha256: str
 
 
 def _get(d: dict[str, Any], key: str, default: Any = None) -> Any:
@@ -66,6 +72,7 @@ def load_trade_config(path: str | Path) -> TradeConfig:
     trade = raw.get("trade", {}) or {}
     risk = raw.get("risk", {}) or {}
     paths = raw.get("paths", {}) or {}
+    model_artifact = raw.get("model_artifact", {}) or {}
 
     return TradeConfig(
         symbol=str(_get(market, "symbol", "BTC/USDT")),
@@ -105,5 +112,11 @@ def load_trade_config(path: str | Path) -> TradeConfig:
         claim_timeout_sec=int(_get(trade, "claim_timeout_sec", 300)),
         model_opt_json=str(_get(paths, "model_opt_json", "outputs/opt_15m_details.json")),
         model_dir=str(_get(paths, "model_dir", "models/fixed_15m_stacking")),
+        model_artifact_enabled=bool(_get(model_artifact, "enabled", False)),
+        model_artifact_url=str(_get(model_artifact, "url", "")),
+        model_artifact_sha256=str(_get(model_artifact, "sha256", "")),
+        model_artifact_require_optimal=bool(_get(model_artifact, "require_optimal", True)),
+        model_artifact_expected_model_name=str(_get(model_artifact, "expected_model_name", "ensemble_stacking")),
+        model_artifact_expected_opt_sha256=str(_get(model_artifact, "expected_opt_sha256", "")),
     )
 
