@@ -306,13 +306,19 @@ def run_live_loop(cfg: TradeConfig, *, run_once: bool = False) -> None:
             if action != "HOLD":
                 if len(st.orders_in_hour) >= cfg.max_orders_per_hour:
                     risk_block = "MAX_ORDERS_PER_HOUR"
-                elif st.usdc_today + order_usdc > cfg.max_usdc_per_day:
+                elif (cfg.max_usdc_per_day > 0) and (st.usdc_today + order_usdc > cfg.max_usdc_per_day):
                     risk_block = "MAX_USDC_PER_DAY"
 
             exec_result = None
             if action != "HOLD" and risk_block is None and cfg.live_enabled:
-                # 保留买入边际：默认最高 0.51，置信度 > 0.60 时最高 0.52。
-                prob_cap = 0.52 if side_prob > 0.60 else 0.51
+                # 分档限价上限：
+                # 0.52-0.53 -> 0.50，0.53-0.54 -> 0.51，>=0.54 -> 0.52
+                if side_prob >= 0.54:
+                    prob_cap = 0.52
+                elif side_prob >= 0.53:
+                    prob_cap = 0.51
+                else:
+                    prob_cap = 0.50
                 limit_px = min(cfg.max_price, max(cfg.min_price, side_prob), prob_cap)
                 exec_result = executor.buy_token_post_only(
                     token_id=token_id,

@@ -74,3 +74,6 @@
 - 支持与主程序同样的代理参数：
   - `./.venv/bin/python run_settlement.py --config trade_config.yaml --proxy http://127.0.0.1:7897 --dry-run`
 
+## 调试文档
+- Redeem 验证与排障：`debug/redeem_debug_guide.md`
+

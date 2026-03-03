@@ -51,7 +51,8 @@ trade:
 
 risk:
   max_orders_per_hour: 20
-  max_usdc_per_day: 200
+  # <=0 表示禁用每日额度限制
+  max_usdc_per_day: 0
   slippage: 0.03
   min_price: 0.05
   max_price: 0.95
